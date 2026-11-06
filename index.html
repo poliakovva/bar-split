@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>чек из бара — кто за что скинул</title>
+<meta name="theme-color" content="#f6f4ef">
+<style>
+  :root{--bg:#f6f4ef;--fg:#1d1c1a;--mut:#8a867d;--line:#e3dfd5;--acc:#2f6f4e;--acc2:#e7f0ea;--sel:#1d1c1a;--warn:#b5651d}
+  @media (prefers-color-scheme:dark){:root{--bg:#141413;--fg:#ecebe6;--mut:#8d8a82;--line:#2a2927;--acc:#6fbf8f;--acc2:#1d2a22;--sel:#ecebe6;--warn:#e0a060}}
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  main{max-width:560px;margin:0 auto;padding:20px 16px 120px}
+  h1{font-size:20px;margin:0 0 2px;font-weight:600}
+  .mut{color:var(--mut)}
+  .sm{font-size:13px}
+  .bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin:12px 0 6px}
+  .bar i{display:block;height:100%;background:var(--acc);width:0;transition:width .3s}
+  .row{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+  input[type=text],input[type=password]{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:transparent;color:var(--fg);font:inherit}
+  input:focus{outline:none;border-color:var(--fg)}
+  .name{margin:18px 0 6px}
+  h2{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);font-weight:600;margin:26px 0 6px}
+  .item{padding:10px 0;border-bottom:1px solid var(--line)}
+  .item .t{font-size:15px}
+  .item .p{color:var(--mut);font-size:13px;white-space:nowrap}
+  .units{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .u{border:1px solid var(--line);background:transparent;color:var(--fg);border-radius:8px;padding:6px 10px;font:inherit;font-size:13px;cursor:pointer;min-width:44px;text-align:left;line-height:1.25;-webkit-tap-highlight-color:transparent}
+  .u small{display:block;color:var(--mut);font-size:11px}
+  .u.mine{background:var(--sel);color:var(--bg);border-color:var(--sel)}
+  .u.mine small{color:var(--bg);opacity:.7}
+  .u.pend{border-style:dashed;border-color:var(--warn)}
+  .u.done{background:var(--acc2);border-color:transparent;color:var(--acc);cursor:default}
+  .u.done small{color:var(--acc)}
+  .u.part{border-color:var(--acc)}
+  .foot{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--line);padding:12px 16px calc(12px + env(safe-area-inset-bottom))}
+  .foot .in{max-width:560px;margin:0 auto;display:flex;gap:10px;align-items:center;justify-content:space-between}
+  .btn{border:0;border-radius:10px;padding:12px 16px;font:inherit;font-weight:600;background:var(--fg);color:var(--bg);cursor:pointer;white-space:nowrap}
+  .btn.ghost{background:transparent;color:var(--fg);border:1px solid var(--line);font-weight:500}
+  .btn.ok{background:var(--acc);color:#fff}
+  .btn:disabled{opacity:.35;cursor:default}
+  .hint{font-size:13px;color:var(--mut);margin:6px 0 0}
+  .people .row{padding:7px 0;border-bottom:1px solid var(--line)}
+  .x{border:0;background:none;color:var(--mut);cursor:pointer;font-size:15px;padding:0 4px}
+  .card{border:1px solid var(--line);border-radius:12px;padding:14px;margin:16px 0}
+  .hidden{display:none!important}
+  a{color:inherit}
+  .toast{position:fixed;left:50%;top:16px;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9}
+  .toast.on{opacity:1}
+</style>
+</head>
+<body>
+<main>
+  <h1>чек из бара</h1>
+  <div class="mut sm" id="sub">загружаю…</div>
+  <div class="bar"><i id="prog"></i></div>
+  <div class="row sm"><span id="paidTxt"></span><span class="mut" id="leftTxt"></span></div>
+
+  <!-- admin: confirm incoming claim -->
+  <div id="adminBox" class="card hidden"></div>
+
+  <div class="name">
+    <input type="text" id="name" placeholder="как тебя зовут?" autocomplete="given-name">
+    <p class="hint">тапни то, что ты ел и пил. тапнешь ещё раз — доля станет ½, ⅓, ¼ (если делили на несколько человек). зелёное — уже оплачено.</p>
+  </div>
+
+  <div id="list"></div>
+
+  <h2>кто сколько скинул</h2>
+  <div class="people" id="people"></div>
+  <p class="sm mut" style="margin-top:28px"><a href="#admin" id="adminLink">я влад</a></p>
+</main>
+
+<div class="foot"><div class="in">
+  <div><div id="mySum" style="font-weight:600">0 ₽</div><div class="sm mut" id="myNote">ничего не выбрано</div></div>
+  <div style="display:flex;gap:8px">
+    <button class="btn ghost" id="clearBtn">сброс</button>
+    <button class="btn" id="sendBtn" disabled>я перевёл</button>
+  </div>
+</div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== настройки =====
+const REPO = 'poliakovva/bar-split';
+const TG = 'vapolyakov';                 // куда слать подтверждение
+const PAY = 'т-банк +7 993 927-01-29';   // реквизиты — показываются внизу
+const TOTAL = 40084;
+
+// [название, цена, кол-во, раздел] — ровно как в чеке (29 строк, сумма 40 084 ₽)
+const ITEMS = [
+  ['Clover Club',1089,5,'коктейли'],
+  ['Aries',1089,1,'коктейли'],
+  ['Smoky Pear lemonade',550,2,'лимонады'],
+  ['Мезе',1518,1,'еда'],
+  ['Жареный сулугуни с заатаром и соусом амба',748,4,'еда'],
+  ['Грибной пирог с козьим сыром и сливочным соусом',946,1,'еда'],
+  ['Пита с кебабом из говядины и израильским салатом',935,1,'еда'],
+  ['Dry Daiquiri',1089,2,'коктейли'],
+  ['Микс салатов с индейкой, кукурузой, хрустящими баклажанами, фундуком',858,1,'еда'],
+  ['Paloma Lemonade',1089,3,'коктейли'],
+  ['Шварма из индейки',902,3,'еда'],
+  ['Bareket lemonade',550,2,'лимонады'],
+  ['Сырный фалафель с амбой и тхиной',638,1,'еда'],
+  ['Шницель из индейки с соусом песто и овощным салатом',1298,1,'еда'],
+  ['Бурекасы с баклажаном',792,1,'еда'],
+  ['Пита с куриным шницелем, коул-слоу, солёным огурцом и соусом айоли',858,2,'еда'],
+  ['Маца',88,2,'хлеб'],
+  ['Пита',55,2,'хлеб'],
+  ['Хала',55,3,'хлеб'],
+  ['Espresso Martini',1089,1,'коктейли'],
+  ['Tommy D Sour',1089,3,'коктейли'],
+  ['Raspberry jalapeno lemonade',550,1,'лимонады'],
+  ['Jerusalem Elixir',1089,1,'коктейли'],
+  ['Чипсы из батата с домашним айоли',528,1,'еда'],
+  ['Тартар из говядины с кедровыми орехами',1012,1,'еда'],
+  ['Запечённый шафрановый чизкейк с соусом амба',792,1,'еда'],
+  ['Grapefruit lemonade',550,1,'лимонады'],
+  ['New York Sour',1089,1,'коктейли'],
+  ['Taurus',1089,1,'коктейли'],
+];
+const SECTIONS = ['коктейли','лимонады','еда','хлеб'];
+const PRICE = {}; ITEMS.forEach((it,i)=>{for(let k=0;k<it[2];k++)PRICE[i+'-'+k]=it[1]});
+
+// ===== состояние =====
+// state.claims: { unitId: [{n: имя, d: делитель}] }  — подтверждённые (оплаченные) доли
+let state = {claims:{}}, sha = null;
+let mine = load('mine', {});          // { unitId: делитель } — выбор на этом устройстве
+let sent = load('sent', {});          // то, что отправлено владу, но ещё не подтверждено
+const $ = id => document.getElementById(id);
+function load(k,d){try{return JSON.parse(localStorage.getItem('bs_'+k))??d}catch{return d}}
+function save(k,v){try{localStorage.setItem('bs_'+k,JSON.stringify(v))}catch{}}
+const rub = x => Math.round(x).toLocaleString('ru-RU').replace(/,/g,' ')+' ₽';
+const FR = {1:'',2:'½',3:'⅓',4:'¼'};
+const token = () => load('token', '');
+const isAdmin = () => location.hash.startsWith('#admin') || !!token();
+function toast(t){const e=$('toast');e.textContent=t;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),2200)}
+
+const covered = id => (state.claims[id]||[]).reduce((s,c)=>s+1/c.d,0);
+const norm = s => s.trim().toLowerCase();
+
+async function fetchState(){
+  try{
+    const r = await fetch(`https://api.github.com/repos/${REPO}/contents/state.json?t=${Date.now()}`,
+      {headers: token()?{Authorization:'Bearer '+token()}:{}, cache:'no-store'});
+    if(!r.ok) throw 0;
+    const j = await r.json(); sha = j.sha;
+    state = JSON.parse(decodeURIComponent(escape(atob(j.content.replace(/\n/g,'')))));
+  }catch{
+    try{ state = await (await fetch('state.json?t='+Date.now(),{cache:'no-store'})).json() }catch{}
+  }
+  state.claims ||= {};
+  // убираем из «отправлено» то, что влад уже подтвердил
+  const me = norm($('name').value);
+  for(const id in sent) if((state.claims[id]||[]).some(c=>norm(c.n)===me)) delete sent[id];
+  save('sent',sent);
+}
+
+async function pushState(msg){
+  const body = {message:msg, content:btoa(unescape(encodeURIComponent(JSON.stringify(state,null,1)))), sha};
+  const r = await fetch(`https://api.github.com/repos/${REPO}/contents/state.json`,
+    {method:'PUT',headers:{Authorization:'Bearer '+token(),'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(!r.ok){ toast('не сохранилось: '+r.status); throw new Error(r.status) }
+  sha = (await r.json()).content.sha;
+}
+
+// ===== отрисовка =====
+function render(){
+  // общий прогресс
+  let paid = 0; for(const id in PRICE) paid += PRICE[id]*Math.min(1,covered(id));
+  $('sub').textContent = `${ITEMS.reduce((s,i)=>s+i[2],0)} позиций · всего ${rub(TOTAL)}`;
+  $('prog').style.width = (paid/TOTAL*100)+'%';
+  $('paidTxt').textContent = 'скинули '+rub(paid);
+  $('leftTxt').textContent = 'осталось '+rub(TOTAL-paid);
+
+  // позиции
+  const L = $('list'); L.innerHTML='';
+  for(const sec of SECTIONS){
+    const h=document.createElement('h2'); h.textContent=sec; L.appendChild(h);
+    ITEMS.forEach((it,i)=>{
+      if(it[3]!==sec) return;
+      const d=document.createElement('div'); d.className='item';
+      d.innerHTML=`<div class="row"><span class="t">${it[0]}</span><span class="p">${it[2]>1?it[2]+' × ':''}${rub(it[1])}</span></div>`;
+      const us=document.createElement('div'); us.className='units';
+      for(let k=0;k<it[2];k++){
+        const id=i+'-'+k, cov=covered(id), cl=state.claims[id]||[];
+        const b=document.createElement('button'); b.className='u';
+        const who=cl.map(c=>c.n+(c.d>1?' '+FR[c.d]:'')).join(', ');
+        if(mine[id]){ b.classList.add('mine'); if(sent[id]) b.classList.add('pend') }
+        else if(cov>=0.999) b.classList.add('done');
+        else if(cov>0) b.classList.add('part');
+        const label = it[2]>1 ? '#'+(k+1) : (cov>=0.999?'оплачено':'моё');
+        b.innerHTML = (mine[id]? (FR[mine[id]]||'✓')+' ' : (cov>=0.999?'✓ ':'')) + label
+          + (who?`<small>${who}</small>`:'') + (mine[id]&&sent[id]?'<small>ждёт подтверждения</small>':'');
+        if(cov<0.999 || mine[id]) b.onclick=()=>toggle(id);
+        us.appendChild(b);
+      }
+      d.appendChild(us); L.appendChild(d);
+    });
+  }
+
+  // люди
+  const P={}; for(const id in state.claims) for(const c of state.claims[id]) P[c.n]=(P[c.n]||0)+PRICE[id]/c.d;
+  const pp=$('people'); pp.innerHTML='';
+  const names=Object.keys(P).sort((a,b)=>P[b]-P[a]);
+  if(!names.length) pp.innerHTML='<div class="sm mut">пока никто</div>';
+  for(const n of names){
+    const r=document.createElement('div'); r.className='row';
+    r.innerHTML=`<span>${esc(n)}</span><span>${rub(P[n])}${isAdmin()&&token()?` <button class="x" title="убрать">×</button>`:''}</span>`;
+    const x=r.querySelector('.x'); if(x) x.onclick=()=>removePerson(n);
+    pp.appendChild(r);
+  }
+
+  // мой итог
+  const ids=Object.keys(mine), s=ids.reduce((a,id)=>a+PRICE[id]/mine[id],0);
+  const unsent=ids.filter(id=>!sent[id]);
+  $('mySum').textContent = rub(s);
+  $('myNote').textContent = !ids.length ? 'ничего не выбрано' : unsent.length ? (PAY||'переведи владу и жми') : 'отправлено, ждём владa';
+  $('sendBtn').disabled = !unsent.length;
+  $('sendBtn').textContent = unsent.length && unsent.length<ids.length ? 'я доперевёл' : 'я перевёл';
+  $('clearBtn').classList.toggle('hidden', !ids.length);
+  $('adminLink').classList.toggle('hidden', !!token());
+}
+const esc = s => s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function toggle(id){
+  if(sent[id]){ toast('уже отправлено владу'); return }
+  const left = 1-covered(id);
+  const seq=[1,2,3,4].filter(d=>1/d<=left+1e-9);       // какие доли ещё влезают
+  const cur=mine[id], i=cur?seq.indexOf(cur):-1;
+  if(i+1<seq.length) mine[id]=seq[i+1]; else delete mine[id];
+  save('mine',mine); render();
+}
+$('clearBtn').onclick=()=>{ for(const id in mine) if(!sent[id]) delete mine[id]; save('mine',mine); render() };
+$('name').value=load('name',''); $('name').oninput=e=>save('name',e.target.value.trim());
+
+// ===== друг: «я перевёл» → ссылка владу =====
+$('sendBtn').onclick=async()=>{
+  const n=$('name').value.trim();
+  if(!n){ $('name').focus(); toast('сначала имя'); return }
+  const u={}; for(const id in mine) if(!sent[id]) u[id]=mine[id];
+  const sum=Object.keys(u).reduce((a,id)=>a+PRICE[id]/u[id],0);
+  const code=btoa(unescape(encodeURIComponent(JSON.stringify({n,u})))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  const link=location.origin+location.pathname+'#c='+code;
+  const lines=Object.keys(u).map(id=>{const it=ITEMS[+id.split('-')[0]];return `${it[0]}${u[id]>1?' '+FR[u[id]]:''}`});
+  const text=`${n}: перевёл ${rub(sum)}\n${lines.join(', ')}\nподтвердить: ${link}`;
+  if(navigator.share){ try{ await navigator.share({text}); markSent(u); return }catch(e){ if(e.name==='AbortError') return } }
+  try{ await navigator.clipboard.writeText(text) }catch{}
+  markSent(u); toast('скопировал — вставь владу в телеграм');
+  setTimeout(()=>location.href='https://t.me/'+TG,700);
+};
+function markSent(u){ for(const id in u) sent[id]=1; save('sent',sent); render() }
+
+// ===== влад =====
+function decodeClaim(){
+  const m=location.hash.match(/#c=([\w-]+)/); if(!m) return null;
+  try{ return JSON.parse(decodeURIComponent(escape(atob(m[1].replace(/-/g,'+').replace(/_/g,'/'))))) }catch{ return null }
+}
+function adminBox(){
+  const box=$('adminBox'), c=decodeClaim();
+  if(!c && !location.hash.startsWith('#admin')){ box.classList.add('hidden'); return }
+  box.classList.remove('hidden');
+  if(!token()){
+    box.innerHTML=`<b>вход для влада</b><p class="hint">нужен fine-grained github-токен только на репо ${REPO} с правом contents: read & write. хранится только в этом браузере.</p>
+      <input type="password" id="tok" placeholder="github_pat_…"><div style="margin-top:10px"><button class="btn" id="tokBtn">сохранить</button></div>`;
+    $('tokBtn').onclick=async()=>{ save('token',$('tok').value.trim()); await fetchState(); adminBox(); render() };
+    return;
+  }
+  if(!c){ box.innerHTML=`<div class="row"><span>ты влад. жди ссылки от друзей</span><button class="btn ghost" id="out">выйти</button></div>`;
+    $('out').onclick=()=>{save('token','');location.hash='';adminBox();render()}; return }
+  const sum=Object.keys(c.u).reduce((a,id)=>a+PRICE[id]/c.u[id],0);
+  const lines=Object.keys(c.u).map(id=>{const it=ITEMS[+id.split('-')[0]];
+    const dup=(state.claims[id]||[]).some(x=>norm(x.n)===norm(c.n));
+    const over=covered(id)+1/c.u[id]>1.001;
+    return `<div class="row sm"><span>${it[0]}${c.u[id]>1?' '+FR[c.u[id]]:''}${dup?' <span style="color:var(--warn)">(уже есть)</span>':over?' <span style="color:var(--warn)">(уже занято)</span>':''}</span><span>${rub(it[1]/c.u[id])}</span></div>`}).join('');
+  box.innerHTML=`<div class="row"><b>${esc(c.n)} говорит, что перевёл</b><b>${rub(sum)}</b></div><div style="margin:10px 0">${lines}</div>
+    <div style="display:flex;gap:8px"><button class="btn ok" id="okBtn">деньги пришли ✓</button><button class="btn ghost" id="noBtn">не сейчас</button></div>`;
+  $('noBtn').onclick=()=>{location.hash='';adminBox()};
+  $('okBtn').onclick=async()=>{
+    $('okBtn').disabled=true;
+    await fetchState();
+    for(const id in c.u){ const a=state.claims[id] ||= []; if(!a.some(x=>norm(x.n)===norm(c.n))) a.push({n:c.n,d:c.u[id]}) }
+    try{ await pushState(`${c.n}: +${Math.round(sum)} ₽`); toast('записал'); location.hash='' }catch{ $('okBtn').disabled=false; return }
+    adminBox(); render();
+  };
+}
+async function removePerson(n){
+  if(!confirm(`убрать все отметки «${n}»?`)) return;
+  await fetchState();
+  for(const id in state.claims){ state.claims[id]=state.claims[id].filter(c=>c.n!==n); if(!state.claims[id].length) delete state.claims[id] }
+  await pushState(`убрал ${n}`); render();
+}
+
+window.addEventListener('hashchange',()=>{adminBox();render()});
+(async()=>{ render(); await fetchState(); adminBox(); render();
+  setInterval(async()=>{ if(document.visibilityState==='visible'&&!decodeClaim()){ await fetchState(); render() } }, 60000);
+})();
+</script>
+</body>
+</html>
