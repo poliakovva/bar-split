@@ -152,8 +152,8 @@ async function fetchState(){
   state.claims ||= {};
   // убираем из «отправлено» то, что влад уже подтвердил
   const me = norm($('name').value);
-  for(const id in sent) if((state.claims[id]||[]).some(c=>norm(c.n)===me)) delete sent[id];
-  save('sent',sent);
+  for(const id in sent) if((state.claims[id]||[]).some(c=>norm(c.n)===me)){ delete sent[id]; delete mine[id] }
+  save('sent',sent); save('mine',mine);
 }
 
 async function pushState(msg){
@@ -244,11 +244,32 @@ $('sendBtn').onclick=async()=>{
   const link=location.origin+location.pathname+'#c='+code;
   const lines=Object.keys(u).map(id=>{const it=ITEMS[+id.split('-')[0]];return `${it[0]}${u[id]>1?' '+FR[u[id]]:''}`});
   const text=`${n}: перевёл ${rub(sum)}\n${lines.join(', ')}\nподтвердить: ${link}`;
-  if(navigator.share){ try{ await navigator.share({text}); markSent(u); return }catch(e){ if(e.name==='AbortError') return } }
-  try{ await navigator.clipboard.writeText(text) }catch{}
-  markSent(u); toast('скопировал — вставь владу в телеграм');
-  setTimeout(()=>location.href='https://t.me/'+TG,700);
+  if(token()){ // это влад — записываем сразу, без ссылки самому себе
+    $('sendBtn').disabled=true;
+    try{
+      await fetchState();
+      for(const id in u){ const a=state.claims[id] ||= []; if(!a.some(x=>norm(x.n)===norm(n))) a.push({n,d:u[id]}) }
+      await pushState(`${n}: +${Math.round(sum)} ₽`);
+      for(const id in u) delete mine[id]; save('mine',mine); toast('записал');
+    }catch{}
+    render(); return;
+  }
+  if(navigator.share && matchMedia('(pointer:coarse)').matches){ // телефон — системное «поделиться»
+    try{ await navigator.share({text}); markSent(u); return }catch(e){ if(e.name==='AbortError') return }
+  }
+  showMsg(text,u);
 };
+function showMsg(text,u){
+  const box=$('adminBox'); box.classList.remove('hidden');
+  box.innerHTML=`<b>отправь это владу в телеграм</b>
+    <pre style="white-space:pre-wrap;word-break:break-all;font:12px/1.4 ui-monospace,monospace;background:var(--line);padding:10px;border-radius:8px;margin:10px 0">${esc(text)}</pre>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="cpBtn">скопировать</button>
+    <a class="btn ghost" href="https://t.me/${TG}" target="_blank" style="text-decoration:none">открыть телеграм</a>
+    <button class="btn ghost" id="okSent">готово</button></div>`;
+  $('cpBtn').onclick=async()=>{ try{ await navigator.clipboard.writeText(text); toast('скопировал') }catch{ toast('выдели текст и скопируй') } markSent(u) };
+  $('okSent').onclick=()=>{ markSent(u); box.classList.add('hidden') };
+  box.scrollIntoView({behavior:'smooth',block:'center'});
+}
 function markSent(u){ for(const id in u) sent[id]=1; save('sent',sent); render() }
 
 // ===== влад =====
